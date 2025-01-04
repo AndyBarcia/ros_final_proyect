@@ -18,13 +18,11 @@ from behaviours.stuck_detection import StuckDetection
 
 def main():
     rospy.init_node('behaviour_tree_node')
+
     robot_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
     lidar_processor = LidarProcessor()
     rospy.Subscriber('/scan', LaserScan, lidar_processor.lidar_callback)
     
-    # Create the blackboard
-    blackboard = py_trees.blackboard.Blackboard()
-
     # Behaviors
     move_forward = MoveForward(robot_vel_pub)
     move_backward = MoveBackward(robot_vel_pub)
@@ -36,7 +34,24 @@ def main():
     decide_movement=DecideMovement(lidar_processor, robot_vel_pub)
     
     # Behavior Tree Structure
-    root = py_trees.composites.Sequence("Root", memory=blackboard, children=[move_forward])
+    root = py_trees.composites.Selector("Root", memory=True, children=[
+        py_trees.composites.Sequence(
+            "MoveForward", 
+            memory=False, # Important no memory to force to execute repeatedly.
+            children=[
+                ObstacleDetection(robot_vel_pub, fixed_direction_angle=0.0), 
+                MoveForward(robot_vel_pub)
+            ]
+        ),
+        py_trees.composites.Sequence(
+            "MoveBackwards", 
+            memory=False, # Important no memory to force to execute repeatedly.
+            children=[
+                ObstacleDetection(robot_vel_pub, fixed_direction_angle=180.0),
+                MoveBackward(robot_vel_pub)
+            ]
+        ),
+    ])
 
     tree = py_trees.trees.BehaviourTree(root)
 

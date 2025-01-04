@@ -1,8 +1,13 @@
+import py_trees
 import numpy as np
 import math
 
 class LidarProcessor:
     def __init__(self, robot_radius=0.3, safe_margin=0.1):
+        self.blackboard = py_trees.blackboard.Client(name="Global")
+        self.blackboard.register_key(key="safe_distances", access=py_trees.common.Access.WRITE)
+        self.blackboard.register_key(key="sensor_angles", access=py_trees.common.Access.WRITE)
+
         self.scan = None
         self.safe_distances = {}
         self.door_locations = []
@@ -15,6 +20,9 @@ class LidarProcessor:
         self.scan = scan
         self.safe_distances, self.sensor_angles = self.maximum_safe_distance()
         self.find_door_locations()
+
+        self.blackboard.safe_distances = list(self.safe_distances)
+        self.blackboard.sensor_angles = list(self.sensor_angles)
 
     def get_scan(self):
         return self.scan
@@ -154,12 +162,3 @@ class LidarProcessor:
     
     def get_safe_distances(self):
         return self.safe_distances
-    
-    def get_max_distance_in_direction(self,angle):
-        if self.safe_distances is not None and self.sensor_angles is not None:
-           
-            # Find the closest angle index in sensor_angles
-            closest_index = np.argmin(np.abs(np.array(self.sensor_angles) - angle))
-            return self.safe_distances[closest_index]
-        else:
-            return 0
