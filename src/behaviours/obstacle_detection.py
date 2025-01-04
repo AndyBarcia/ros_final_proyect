@@ -37,6 +37,8 @@ class ObstacleDetection(py_trees.behaviour.Behaviour):
         forward_safe_distance = self.get_max_distance_in_direction(self.fixed_direction_angle)
 
         if forward_safe_distance < self.obstacle_threshold:
+            print("OBSTACLE DETECTED")
+
             # Stop the robot
             twist = Twist()
             twist.linear.x = 0
@@ -46,6 +48,7 @@ class ObstacleDetection(py_trees.behaviour.Behaviour):
             # Fail so that no other behaviours in the tree get executed.
             return py_trees.common.Status.FAILURE
         else:
+            print("MOVING")
 
             # If no obstacle, we can continue.
             return py_trees.common.Status.SUCCESS

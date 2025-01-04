@@ -9,11 +9,10 @@ from utils.lidar import LidarProcessor
 
 from behaviours.decide_movement import DecideMovement
 from behaviours.find_doors import FindDoors
-from behaviours.move_backward import MoveBackward
-from behaviours.move_forward import MoveForward
+from behaviours.fixed_movement import FixedMovement
 from behaviours.move_to_door import MoveToDoor
 from behaviours.obstacle_detection import ObstacleDetection
-from behaviours.random_rotation import RandomRotation
+from behaviours.random_rotation import RandomSafeRotation
 from behaviours.stuck_detection import StuckDetection
 
 def main():
@@ -23,16 +22,6 @@ def main():
     lidar_processor = LidarProcessor()
     rospy.Subscriber('/scan', LaserScan, lidar_processor.lidar_callback)
     
-    # Behaviors
-    move_forward = MoveForward(robot_vel_pub)
-    move_backward = MoveBackward(robot_vel_pub)
-    obstacle_detection = ObstacleDetection(lidar_processor, robot_vel_pub)
-    find_doors = FindDoors(lidar_processor)
-    move_to_door = MoveToDoor(lidar_processor, robot_vel_pub)
-    random_rotation = RandomRotation(robot_vel_pub)
-    stuck_detection = StuckDetection(lidar_processor, robot_vel_pub, move_forward)
-    decide_movement=DecideMovement(lidar_processor, robot_vel_pub)
-    
     # Behavior Tree Structure
     root = py_trees.composites.Selector("Root", memory=True, children=[
         py_trees.composites.Sequence(
@@ -40,15 +29,23 @@ def main():
             memory=False, # Important no memory to force to execute repeatedly.
             children=[
                 ObstacleDetection(robot_vel_pub, fixed_direction_angle=0.0), 
-                MoveForward(robot_vel_pub)
+                FixedMovement(robot_vel_pub, linear_speed=0.2)
             ]
         ),
         py_trees.composites.Sequence(
-            "MoveBackwards", 
+            "RetryDirection", 
             memory=False, # Important no memory to force to execute repeatedly.
             children=[
-                ObstacleDetection(robot_vel_pub, fixed_direction_angle=180.0),
-                MoveBackward(robot_vel_pub)
+                # How to optionally move backwards and rotate?
+                py_trees.composites.Sequence(
+                    "MoveBackwards",
+                    memory=False,
+                    children = [
+                        ObstacleDetection(robot_vel_pub, fixed_direction_angle=180.0),
+                        FixedMovement(robot_vel_pub, linear_speed=-0.2, max_time=1.0),
+                    ]
+                ),
+                RandomSafeRotation(robot_vel_pub)
             ]
         ),
     ])
