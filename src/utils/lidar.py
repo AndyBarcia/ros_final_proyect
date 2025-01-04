@@ -1,5 +1,6 @@
 import numpy as np
 import math
+from sensor_msgs.msg import LaserScan
 
 class LidarProcessor:
     def __init__(self, robot_radius=0.3, safe_margin=0.1):
@@ -10,11 +11,14 @@ class LidarProcessor:
         self.safe_margin = safe_margin
         self.sensor_angles = None
         self.previous_scan_ranges = None
+        self.ranges = []
 
-    def lidar_callback(self, scan):
+    def lidar_callback(self, scan: LaserScan):
         self.scan = scan
         self.safe_distances, self.sensor_angles = self.maximum_safe_distance()
         self.find_door_locations()
+        self.ranges = np.array(scan.ranges)
+        self.ranges = np.where(np.isnan(self.ranges), np.inf, self.ranges)  # Replace NaNs with infinity
 
     def get_scan(self):
         return self.scan
@@ -163,3 +167,9 @@ class LidarProcessor:
             return self.safe_distances[closest_index]
         else:
             return 0
+
+    def detect_obstacles(self, robot_radius):
+        forward_distances = np.array(self.ranges[0:10])  # Example range indices for forward distances
+        side_distances = np.array(self.ranges[10:20])   # Example range indices for side distances
+        collisions = (forward_distances >= 0) & (np.abs(side_distances) < robot_radius)
+        return np.any(collisions)
