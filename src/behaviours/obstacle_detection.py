@@ -1,5 +1,7 @@
 import py_trees
 from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
+from rospy import Subscriber
 import numpy as np
 import math
 
@@ -19,8 +21,21 @@ class ObstacleDetection(py_trees.behaviour.Behaviour):
 
         self.fixed_direction_angle = fixed_direction_angle
         self.robot_vel_pub = robot_vel_pub
+        
+        # The reference distance to consider an obstacle when the robot is going 1m/s.
+        # When going slower, the distance becomes smaller as it is easier to stop.
         self.obstacle_threshold = obstacle_threshold
         self.robot_vel_pub = robot_vel_pub
+
+        self.current_speed = 0.0  # To store the current robot speed
+
+        # Subscribe to the robot's velocity topic
+        self.odom_subscriber = Subscriber("/odom", Odometry, self.odometry_callback)
+
+    def odometry_callback(self, msg):
+        # Update the current speed from the linear.x component of the Twist message
+        linear_velocity = msg.twist.twist.linear
+        self.current_speed = math.sqrt(linear_velocity.x**2 + linear_velocity.y**2 + linear_velocity.z**2)
 
     def get_max_distance_in_direction(self,grad_angle):
         if self.blackboard.exists("safe_distances") and self.blackboard.exists("sensor_angles"):
@@ -40,11 +55,13 @@ class ObstacleDetection(py_trees.behaviour.Behaviour):
         if not forward_safe_distance:
             return py_trees.common.Status.RUNNING
 
-        if forward_safe_distance < self.obstacle_threshold:
-            print(f"OBSTACLE DETECTED AT DIRECTION {self.fixed_direction_angle}; DISTANCE {forward_safe_distance}")
-
-            print(self.blackboard.safe_distances)
-
+        # Given that to stop an object of mass m at speed v along a distance d the following holds:
+        #  F*d = 1/2*m*v^2
+        # And for the robot the force F and mass m remains constant, then we have that
+        #  d ≈ v^2
+        # So the stopping distance is proportional to velocity square.
+        # Knowing this, we can simply scale the reference stopping distance by velocity square.
+        if forward_safe_distance < (self.obstacle_threshold*self.current_speed*self.current_speed):
             # Stop the robot
             twist = Twist()
             twist.linear.x = 0
