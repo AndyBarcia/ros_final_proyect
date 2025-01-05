@@ -3,7 +3,7 @@ import numpy as np
 import math
 
 class LidarProcessor:
-    def __init__(self, robot_radius=0.3, safe_margin=0.1):
+    def __init__(self, robot_radius=0.2, safe_margin=0.01):
         self.blackboard = py_trees.blackboard.Client(name="Global")
         self.blackboard.register_key(key="safe_distances", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key(key="sensor_angles", access=py_trees.common.Access.WRITE)
@@ -14,7 +14,6 @@ class LidarProcessor:
         self.robot_radius = robot_radius
         self.safe_margin = safe_margin
         self.sensor_angles = None
-        self.previous_scan_ranges = None
 
     def lidar_callback(self, scan):
         self.scan = scan
@@ -24,31 +23,23 @@ class LidarProcessor:
         self.blackboard.safe_distances = list(self.safe_distances)
         self.blackboard.sensor_angles = list(self.sensor_angles)
 
-    def get_scan(self):
-        return self.scan
-
-    def get_previous_scan_ranges(self):
-        return self.previous_scan_ranges
-    
-    def update_previous_scan_ranges(self):
-        if self.scan is not None:
-            self.previous_scan_ranges = np.array(self.scan.ranges)
-        else:
-            self.previous_scan_ranges=None
-
     def maximum_safe_distance(self):
         if self.scan is None:
-             return {}, None
+            return None, None
 
+        # The values recorded by the lidar sensor.
         sensor_values = np.array(self.scan.ranges)
-        # Take into account safe margin
-        robot_radius = self.robot_radius + self.safe_margin
 
-        # The angle that each sensor makes with the forward direction.
-        sensor_angles = np.linspace(0, 2*np.pi, len(sensor_values)+1)[:-1]
+        # The angle that each sensor makes with the forward direction in radians
+        sensor_angles = np.linspace(self.scan.angle_min, self.scan.angle_max, len(sensor_values)+1)[:-1]
 
-        # Create a matrix of all possible sensor values for all directions..
-        #per_direction_sensor_values = create_shifted_matrix(sensor_values)
+        # Remove from consideration values above or below the maximum scan value, 
+        # as per the documentation. http://docs.ros.org/en/noetic/api/sensor_msgs/html/msg/LaserScan.html
+        valid_readings = (sensor_values > self.scan.range_min) & (sensor_values < self.scan.range_max)
+        sensor_values = sensor_values[valid_readings]
+        sensor_angles = sensor_angles[valid_readings]
+
+        # Create a matrix of all possible sensor values for all directions.
         per_direction_sensor_values = np.array([
             np.roll(sensor_values, -i) 
             for i in range(len(sensor_values))
@@ -60,6 +51,7 @@ class LidarProcessor:
             side_distances = np.sin(sensor_angles) * per_direction_sensor_values
 
         # Identify potential collisions in each direction
+        robot_radius = self.robot_radius + self.safe_margin
         collisions = (forward_distances >= 0) & (np.abs(side_distances) < robot_radius)    
 
         # The maximum safe distance across all directions, initially
@@ -95,7 +87,6 @@ class LidarProcessor:
                 max_safe_distances[direction_idx] = min_dist
         
         return max_safe_distances, sensor_angles
-
 
     def find_door_locations(self):
         if self.scan is None:
