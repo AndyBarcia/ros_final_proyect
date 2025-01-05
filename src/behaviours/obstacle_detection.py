@@ -9,7 +9,7 @@ class ObstacleDetection(py_trees.behaviour.Behaviour):
         robot_vel_pub, 
         fixed_direction_angle=0.0,
         name="ObstacleDetection", 
-        obstacle_threshold=0.5
+        obstacle_threshold=0.15
     ):
         super(ObstacleDetection, self).__init__(name)
 
@@ -29,15 +29,21 @@ class ObstacleDetection(py_trees.behaviour.Behaviour):
             closest_index = np.argmin(np.abs(np.array(self.blackboard.sensor_angles) - angle))
             return self.blackboard.safe_distances[closest_index]
         else:
-            # Otherwise, assume the safe distance is 0.
-            return 0
+            # Otherwise, report that we don't know the safe distance.
+            return None
 
     def update(self):
         # Get safe distance along given forward direction.
         forward_safe_distance = self.get_max_distance_in_direction(self.fixed_direction_angle)
+        
+        # If we still don't know the safe distance because LIDAR didn't boot up, keep running.
+        if not forward_safe_distance:
+            return py_trees.common.Status.RUNNING
 
         if forward_safe_distance < self.obstacle_threshold:
-            print("OBSTACLE DETECTED")
+            print(f"OBSTACLE DETECTED AT DIRECTION {self.fixed_direction_angle}; DISTANCE {forward_safe_distance}")
+
+            print(self.blackboard.safe_distances)
 
             # Stop the robot
             twist = Twist()
@@ -48,7 +54,5 @@ class ObstacleDetection(py_trees.behaviour.Behaviour):
             # Fail so that no other behaviours in the tree get executed.
             return py_trees.common.Status.FAILURE
         else:
-            print("MOVING")
-
             # If no obstacle, we can continue.
             return py_trees.common.Status.SUCCESS
