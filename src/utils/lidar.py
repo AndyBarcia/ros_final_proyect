@@ -33,11 +33,12 @@ class LidarProcessor:
         # The angle that each sensor makes with the forward direction in radians
         sensor_angles = np.linspace(self.scan.angle_min, self.scan.angle_max, len(sensor_values)+1)[:-1]
 
-        # Remove from consideration values above or below the maximum scan value, 
-        # as per the documentation. http://docs.ros.org/en/noetic/api/sensor_msgs/html/msg/LaserScan.html
-        valid_readings = (sensor_values > self.scan.range_min) & (sensor_values < self.scan.range_max)
-        sensor_values = sensor_values[valid_readings]
-        sensor_angles = sensor_angles[valid_readings]
+        # As per the documentation, technically we should ignore values outside the valid
+        # range, but we are just going to replace them with the range values. This is specially
+        # important to work in open spaces, because otherwise we would remove all infinity values. 
+        # http://docs.ros.org/en/noetic/api/sensor_msgs/html/msg/LaserScan.html
+        sensor_values[sensor_values < self.scan.range_min] = self.scan.range_min
+        sensor_values[sensor_values > self.scan.range_max] = self.scan.range_max
 
         # Create a matrix of all possible sensor values for all directions.
         per_direction_sensor_values = np.array([

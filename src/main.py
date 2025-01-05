@@ -18,7 +18,6 @@ from behaviours.stuck_detection import StuckDetection
 def main():
     rospy.init_node('behaviour_tree_node')
 
-    robot_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
     lidar_processor = LidarProcessor()
     rospy.Subscriber('/scan', LaserScan, lidar_processor.lidar_callback)
     
@@ -29,8 +28,8 @@ def main():
             "MoveForward", 
             memory=False,
             children=[
-                ObstacleDetection(robot_vel_pub, fixed_direction_angle=0.0), 
-                FixedMovement(robot_vel_pub, linear_speed=0.2)
+                ObstacleDetection(fixed_direction_angle=0.0, obstacle_threshold=1.5), 
+                FixedMovement(linear_speed=0.2)
             ]
         ),
         # Otherwise, try to move backwards and rotate randomly.
@@ -45,12 +44,22 @@ def main():
                         "Backoff",
                         memory=False,
                         children = [
-                            # Try to move backwards a fixed ammount of time.
-                            ObstacleDetection(robot_vel_pub, fixed_direction_angle=180.0),
+                            # Try to move backwards as long as there are obstacles 1 meter around the robot.
+                            py_trees.decorators.Inverter(
+                                "ObstacleInFront",
+                                child = ObstacleDetection( 
+                                    fixed_direction_angle=None,
+                                    obstacle_threshold=1.0,
+                                    adjust_based_on_speed=False
+                                ),
+                            ),
+                            # Only move backwards if there is no obstacle behind us.
+                            ObstacleDetection(fixed_direction_angle=180.0, obstacle_threshold=1.5),
+                            # Try to move backwards 2 seconds or give up.
                             py_trees.decorators.Timeout(
                                 "MoveBackwards",
-                                duration=1.0,
-                                child=FixedMovement(robot_vel_pub, linear_speed=-0.2),
+                                duration=2.0,
+                                child=FixedMovement(linear_speed=-0.2),
                             )
                         ]
                     )
@@ -59,7 +68,7 @@ def main():
                 # The lower, the more likely it is the direction is a big open space.
                 # Note that low values could result in the robot moving back and forth
                 # in big closed spaces.
-                RandomSafeRotation(robot_vel_pub, temperature=0.1)
+                RandomSafeRotation(temperature=0.1)
             ]
         ),
     ])
