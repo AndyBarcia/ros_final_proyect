@@ -9,7 +9,6 @@ import math
 class RandomSafeRotation(py_trees.behaviour.Behaviour):
     def __init__(
         self,
-        robot_vel_pub,
         angular_speed=0.3,
         name="RandomRotation",
         obstacle_threshold=0.01,
@@ -20,13 +19,13 @@ class RandomSafeRotation(py_trees.behaviour.Behaviour):
         self.blackboard = py_trees.blackboard.Client(name="Global")
         self.blackboard.register_key(key="safe_distances", access=py_trees.common.Access.READ)
         self.blackboard.register_key(key="sensor_angles", access=py_trees.common.Access.READ)
-        self.robot_vel_pub = robot_vel_pub
         self.angular_speed = angular_speed
         self.angle_threshold = angle_threshold
         self.obstacle_threshold = obstacle_threshold
         self.temperature = temperature
         
         # Subscribe to odometry to get robot's orientation
+        self.robot_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
         self.odom_sub = rospy.Subscriber('/odom', Odometry, self.odom_callback)
         self.current_yaw = 0.0
         self.target_safe_angle = None
@@ -43,11 +42,23 @@ class RandomSafeRotation(py_trees.behaviour.Behaviour):
         if sum(safe_mask) == 0:
             return None
         
-        # Clip maxium distance so that they aren't always picked.
-        # safe_distances = np.clip(safe_distances, a_min=None, a_max=self.max_distance)
-                
+        # Create position weights that favor the front
+        num_angles = len(safe_angles)
+        mid_point = num_angles // 2
+        
+        # Create weights that decrease as we move away from the front (0 degrees)
+        # Use cosine function to create smooth weighting
+        position_weights = np.cos(np.abs(safe_angles) * np.pi / 180)
+        
+        # Normalize position weights to be between 0.5 and 1 to maintain some probability
+        # for all directions while still favoring the front
+        position_weights = 0.5 + 0.5 * position_weights
+        
+        # Combine distance information with position weights
+        weighted_distances = safe_distances * position_weights
+        
         # Apply softmax with temperature
-        exp_distances = np.exp(safe_distances / self.temperature)
+        exp_distances = np.exp(weighted_distances / self.temperature)
         probabilities = exp_distances / np.sum(exp_distances)
         
         # Choose angle based on calculated probabilities
@@ -80,14 +91,15 @@ class RandomSafeRotation(py_trees.behaviour.Behaviour):
                 return py_trees.common.Status.FAILURE
         
         # Calculate relative angle to target
-        relative_angle = self.target_safe_angle - self.current_yaw
-        
         # Normalize angle to [-pi, pi]
+        relative_angle = self.target_safe_angle
         while relative_angle > np.pi:
             relative_angle -= 2 * np.pi
         while relative_angle < -np.pi:
             relative_angle += 2 * np.pi
-            
+        
+        relative_angle = relative_angle - self.current_yaw
+
         print(f"ROTATING TOWARDS {relative_angle}")
         
         # Check if target rotation is reached
@@ -95,11 +107,10 @@ class RandomSafeRotation(py_trees.behaviour.Behaviour):
         
         if not reached_target_rotation:
             twist = Twist()
-            # Adjust rotation direction based on shortest path
-            if relative_angle > 0:
-                twist.angular.z = self.angular_speed
-            else:
-                twist.angular.z = -self.angular_speed
+            # Adjust rotation direction based on shortest path. Instead of directly setting
+            # the speed, used sigmoid function to rapidly decrease the rotation speed when 
+            # we are near the target rotation. This avoid jerky movement.
+            twist.angular.z = self.angular_speed * 2 / (1 + math.exp(-50*relative_angle)) - 1
             self.robot_vel_pub.publish(twist)
             return py_trees.common.Status.RUNNING
         else:
