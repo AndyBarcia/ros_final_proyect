@@ -80,7 +80,3 @@ This project provides a base for a more complex navigation system. Future improv
 *   Implementing more sophisticated obstacle avoidance techniques, such as path planning or more intelligent recovery maneuvers.
 *   Adding more advanced behaviors, such as door recognition and traversal.
 *   Adding error handling and debugging mechanisms.
-
-## License
-
-[Optional: Add a license for your project, e.g., MIT, Apache 2.0]
