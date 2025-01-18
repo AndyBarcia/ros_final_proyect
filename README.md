@@ -1,4 +1,4 @@
-# ros_final_proyect
+# Intelligent Robotics 1 - Final Project (ros_final_project)
 
 This repository contains a ROS (Robot Operating System) package for implementing a basic navigation system for a TurtleBot robot using a behavior tree. The robot uses lidar data for perception and employs a subsumption architecture to handle navigation and obstacle avoidance.
 
