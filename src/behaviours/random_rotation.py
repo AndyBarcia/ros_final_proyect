@@ -48,7 +48,7 @@ class RandomSafeRotation(py_trees.behaviour.Behaviour):
         
         # Create weights that decrease as we move away from the front (0 degrees)
         # Use cosine function to create smooth weighting
-        position_weights = np.cos(np.abs(safe_angles) * np.pi / 180)
+        position_weights = np.cos(safe_angles)
         
         # Normalize position weights to be between 0.5 and 1 to maintain some probability
         # for all directions while still favoring the front
@@ -62,7 +62,18 @@ class RandomSafeRotation(py_trees.behaviour.Behaviour):
         probabilities = exp_distances / np.sum(exp_distances)
         
         # Choose angle based on calculated probabilities
-        return np.random.choice(safe_angles, p=probabilities) + self.current_yaw
+        relative_angle = np.random.choice(safe_angles, p=probabilities)
+        absolute_angle = relative_angle + self.current_yaw
+
+        # Wrap around the circle
+        while absolute_angle > np.pi:
+            absolute_angle -= 2 * np.pi
+        while absolute_angle < -np.pi:
+            absolute_angle += 2 * np.pi
+
+        print(f"ABSOLUTE ANGLE {absolute_angle}")
+
+        return absolute_angle
 
     def initialise(self):
         # Try to generate a random safe direction at start.
@@ -90,15 +101,12 @@ class RandomSafeRotation(py_trees.behaviour.Behaviour):
                 print("NO SAFE ANGLES")
                 return py_trees.common.Status.FAILURE
         
-        # Calculate relative angle to target
-        # Normalize angle to [-pi, pi]
-        relative_angle = self.target_safe_angle
-        while relative_angle > np.pi:
-            relative_angle -= 2 * np.pi
-        while relative_angle < -np.pi:
-            relative_angle += 2 * np.pi
-        
-        relative_angle = relative_angle - self.current_yaw
+        # Calculate relative angle to target        
+        relative_angle = self.target_safe_angle - self.current_yaw
+        if relative_angle > np.pi:
+            relative_angle -= 2*np.pi
+        elif relative_angle < -np.pi:
+            relative_angle += 2*np.pi
 
         print(f"ROTATING TOWARDS {relative_angle}")
         
@@ -111,7 +119,11 @@ class RandomSafeRotation(py_trees.behaviour.Behaviour):
             # the speed, used sigmoid function to rapidly decrease the rotation speed when 
             # we are near the target rotation. This avoid jerky movement.
             twist.angular.z = self.angular_speed * 2 / (1 + math.exp(-50*relative_angle)) - 1
+
+            print(f"ROTATE {twist.angular.z}")
+
             self.robot_vel_pub.publish(twist)
             return py_trees.common.Status.RUNNING
         else:
+            print("REACHED TARGET ROTATION")
             return py_trees.common.Status.SUCCESS

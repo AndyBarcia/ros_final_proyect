@@ -84,7 +84,7 @@ class LidarProcessor:
                     )
 
                 # Find minimum forward distance for this direction
-                min_dist = np.min(safe_forward_distances)
+                min_dist = max(np.min(safe_forward_distances), 0.0)
                 max_safe_distances[direction_idx] = min_dist
         
         return max_safe_distances, sensor_angles

@@ -39,7 +39,7 @@ class ObstacleDetection(py_trees.behaviour.Behaviour):
     def get_max_distance_in_direction(self, grad_angle):
         if self.blackboard.exists("safe_distances") and self.blackboard.exists("sensor_angles"):
             # Find the closest angle index in sensor_angles
-            if grad_angle:
+            if grad_angle != None:
                 angle = grad_angle * math.pi / 180.0
                 closest_index = np.argmin(np.abs(np.array(self.blackboard.sensor_angles) - angle))
                 return self.blackboard.safe_distances[closest_index]
@@ -52,9 +52,9 @@ class ObstacleDetection(py_trees.behaviour.Behaviour):
     def update(self):
         # Get safe distance along given forward direction.
         forward_safe_distance = self.get_max_distance_in_direction(self.fixed_direction_angle)
-        
+
         # If we still don't know the safe distance because LIDAR didn't boot up, keep running.
-        if not forward_safe_distance:
+        if forward_safe_distance is None:
             return py_trees.common.Status.RUNNING
 
         # Given that to stop an object of mass m at speed v along a distance d the following holds:
@@ -63,7 +63,7 @@ class ObstacleDetection(py_trees.behaviour.Behaviour):
         #  d ≈ v^2
         # So the stopping distance is proportional to velocity square.
         # Knowing this, we can simply scale the reference stopping distance by velocity square.
-        threshold = self.obstacle_threshold*self.current_speed*self.current_speed if self.adjust_based_on_speed else self.obstacle_threshold
+        threshold = self.obstacle_threshold*self.current_speed*self.current_speed if self.adjust_based_on_speed else self.obstacle_threshold        
         if forward_safe_distance < threshold:
             # Stop the robot
             twist = Twist()
